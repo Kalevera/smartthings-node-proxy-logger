@@ -113,6 +113,8 @@ function Logger(dirname,modname){
       this.logFileWatcher.on('change',(path,stats)=>{
         return callback(path, nconf.get('maxLogSizeBytes') < stats.size);  
       })
+    }else{
+    	return callback(path,nconf.get('maxLogSizeBytes') < stats.size);
     }
   }
   this.reduceLogSize = function (path,callback){
