@@ -18,7 +18,7 @@ function Logger(dirname,modname){
   this.lastLogEmailTime = new Date();
 
   this.log = function log(err,str) {
-
+    let path;
     const mod = this.modname;
     const logTimeStamp = new Date().toISOString();
     const opts = {
@@ -26,14 +26,14 @@ function Logger(dirname,modname){
         autoclose: true
       }
     if(err){
-      var errorString = 'looks like an error message wasn\'t written into the system for this error';
+      let errorString = 'looks like an error message wasn\'t written into the system for this error';
       if(typeof err === 'object'){
         //check if the error is coming from non existent file
         if(err.code === 'ENOENT' && err.syscall && err.path){
           errorString = "Error: "+ err.code + ": " +"no such file or directory, "+ err.syscall + " "+err.path;
         }else{
           //if not an error we were looking for still log the error object.
-          errorString = JSON.stringify(err);  
+          errorString = JSON.stringify(err);
         }
       }else{
         // We're assuming this is a custom string error that was coded in the original logger.
@@ -44,14 +44,14 @@ function Logger(dirname,modname){
       writestream.write(logTimeStamp + ': [' + mod + '] ');
       writestream.write(errorString);
       writestream.end('\r\n');
-      //this.setupEmailNotification('error_log.txt');
+
     }else{
       writestream = fs.createWriteStream('general_log.txt',opts);
       writestream.open();
       writestream.write(logTimeStamp + ': [' + mod + '] ');
       writestream.write(str);
       writestream.end('\r\n');
-      
+
     }
     this.fileWatchComponent();
   }
@@ -65,17 +65,21 @@ function Logger(dirname,modname){
       subject:'Smartthings '+path+' file',
       text:  fileText.toString()
     }
-    if(!this.lastLogEmailTime) this.lastLogEmailTime = new Date(); 
+    if(!this.lastLogEmailTime) this.lastLogEmailTime = new Date();
     if(!this.lastErrorEmailTime) this.lastErrorEmailTime = new Date();
     if(path === 'general_log.txt'){
       //24hours 60000*60*24
       if(currentTime.getTime() - this.lastLogEmailTime.getTime() >= (60000*60*24) && this.sendingGenEmail){
         this.sendEmailNotification(path,data);
+      }else{
+        this.sendingGenEmail = false;
       }
     }else{
       //1hour 60000*60
       if(currentTime.getTime() - this.lastErrorEmailTime.getTime() >= (60000*60) && this.sendingErrorEmail){
         this.sendEmailNotification(path,data);
+      }else{
+        this.sendingErrorEmail = false;
       }
     }
 
@@ -85,44 +89,44 @@ function Logger(dirname,modname){
     mailgun.messages().send(data,function(error,body){
       if(error){
       	self.log(error)
-	    if(path === 'general_log.txt'){
+        if(path === 'general_log.txt'){
 	        self.sendingGenEmail = false;
-	    }else{
-	        self.sendingErrorEmail = false;
-	    }
+        }else{
+          self.sendingErrorEmail = false;
+        }
       }else{
-		self.reduceLogSize(path,()=>{
-			self.log(null, "email sent. [smtp message: "+ body.message+"]")
-		});
-	    if(path === 'general_log.txt'){
+        self.reduceLogSize(path,()=>{
+          self.log(null, "email sent. [smtp message: "+ body.message+"]")
+        });
+        if(path === 'general_log.txt'){
 	        self.lastLogEmailTime = new Date();
 	        self.sendingGenEmail = false;
-	    }else{
+        }else{
 	        self.lastErrorEmailTime = new Date();
 	        self.sendingErrorEmail = false;
-	    }
-      }  
+        }
+      }
     });
   }
-  this.checkLogSize = function(path,filesizeover){
+  this.checkEmailState = function checkEmailState(path,filesizeover){
   	if(filesizeover && path == 'general_log.txt' && !this.sendingGenEmail ){
   		this.sendingGenEmail = true;
   		this.setupEmailNotification(path);
   	}
   	if(filesizeover && path == 'error_log.txt' && !this.sendingErrorEmail ){
   		this.sendingErrorEmail = true;
-  		this.setupEmailNotification(path);	
-  	} 
+  		this.setupEmailNotification(path);
+  	}
   }
-  this.fileWatchComponent = function fileWatchComponent(callback){
+  this.fileWatchComponent = function fileWatchComponent(){
   	let self = this;
-  //chose fs.watchFile() over fs.watch() incase the system is not windows or MacOS... Maybe its a RasberryPi
+  //chose chokidar incase the system is not windows or MacOS and also because it fixed issues with fs file watch core...
     if(!this.logFileWatcher){
       this.logFileWatcher = chokidar.watch(['general_log.txt','error_log.txt']);
       this.logFileWatcher.on('change',(path,stats)=>{
-      	self.checkLogSize(path, nconf.get('maxLogSizeBytes') < stats.size);
+      	self.checkEmailState(path, nconf.get('maxLogSizeBytes') < stats.size);
       })
-  	}	
+  	}
   }
   this.reduceLogSize = function (path,callback){
     const tempwritestream = fs.createWriteStream('temp_'+path); //create a temp file so we don't mess with the one we are replacing. it's currently being used by readstream.
@@ -134,22 +138,23 @@ function Logger(dirname,modname){
       while (null !== (chunk = readstream.read(10))) {
         chunks = chunks + chunk;
         //check to see if the lenght of bytes that we have read so far is near the end of the file. If it is we will write to the temp file.
+        //room to improve here since this uses the log threshold and the file size could be much larger due to the time frames of waiting. this should really
+        //use the current file size minus 400 so that it will drop it to 400kbs
         if(chunks.length > (nconf.get('maxLogSizeBytes') - 400) && !lognotice){
           //put a line at the top of the file to show it was reduced
           lognotice = 'The log was reduced in size and restarted a new one at this point. \r\n'
           //convert the sring to a buffer
           let stringBuff = Buffer.from(lognotice);
-          //write to the temp file. 
+          //write to the temp file.
           tempwritestream.write(stringBuff);
           tempwritestream.write(chunk);
         }else if(chunks.length > (nconf.get('maxLogSizeBytes') - 400 ) && chunk.length >= 10){ //we've already indicated the truncated location now write the remaining data from the old file.
           tempwritestream.write(chunk)
         }else if(chunk.length < 10){ // this is here because at the end of the stream you'll end up with less than 10 bytes of data and so we want to write remaining data to the stream.
           tempwritestream.write(chunk)
-          tempwritestream.end();
+          tempwritestream.end();   //close the write stream so we can read from it.
         }
       }
-      //close the write stream so we can read from it.
     })
   //listen for when we're done with the file that we want to replace, this will fire when the readable event has no more data.
     readstream.on('close',()=>{
@@ -160,15 +165,9 @@ function Logger(dirname,modname){
         //delete the temporary file
         fs.unlink('temp_'+path, ()=>{
           return callback
-        }) 
-       
+        })
+
       });
     })
-  } 
+  }
 }
-
-
-
-
-
-
