@@ -53,33 +53,29 @@ function Logger(dirname,modname){
       writestream.end('\r\n');
       
     }
-    this.fileWatchComponent((path,param)=>{
-      if(param) this.setupEmailNotification(path)
-    });
+    this.fileWatchComponent();
   }
   this.setupEmailNotification = function setupEmailNotification(path){
 
     const currentTime = new Date();
     const fileText = fs.readFileSync(path);
     const data = {
-      from: 'SmartThings Logger <homeSTL@sample.mailgun.org>',
+      from: 'Smartthings Logger <smartthings.logger@homebase.org>',
       to: nconf.get('myEmail'),
-      subject:'Smartthings Log File; Type: '+ path,
+      subject:'Smartthings '+path+' file',
       text:  fileText.toString()
     }
     if(!this.lastLogEmailTime) this.lastLogEmailTime = new Date(); 
     if(!this.lastErrorEmailTime) this.lastErrorEmailTime = new Date();
     if(path === 'general_log.txt'){
       //24hours 60000*60*24
-      if(currentTime.getTime() - this.lastLogEmailTime.getTime() >= (60000*60*24) && !this.sendingGenEmail){
+      if(currentTime.getTime() - this.lastLogEmailTime.getTime() >= (60000*60*24) && this.sendingGenEmail){
         this.sendEmailNotification(path,data);
-        this.sendingGenEmail = true;
       }
     }else{
       //1hour 60000*60
-      if(currentTime.getTime() - this.lastErrorEmailTime.getTime() >= (60000*60) && !this.sendingErrorEmail){
+      if(currentTime.getTime() - this.lastErrorEmailTime.getTime() >= (60000*60) && this.sendingErrorEmail){
         this.sendEmailNotification(path,data);
-        this.sendingErrorEmail = true;
       }
     }
 
@@ -89,33 +85,44 @@ function Logger(dirname,modname){
     mailgun.messages().send(data,function(error,body){
       if(error){
       	self.log(error)
-      }
-      self.reduceLogSize(path,()=>{
-        self.log(null, "email sent. [smtp message: "+ body.message+"]")
-      });
-
-      if(path === 'general_log.txt'){
-        self.lastLogEmailTime = new Date();
-        self.sendingGenEmail = false;
+	    if(path === 'general_log.txt'){
+	        self.sendingGenEmail = false;
+	    }else{
+	        self.sendingErrorEmail = false;
+	    }
       }else{
-        self.lastErrorEmailTime = new Date();
-        self.sendingErrorEmail = false;
-      }
-    
-    })
-
+		self.reduceLogSize(path,()=>{
+			self.log(null, "email sent. [smtp message: "+ body.message+"]")
+		});
+	    if(path === 'general_log.txt'){
+	        self.lastLogEmailTime = new Date();
+	        self.sendingGenEmail = false;
+	    }else{
+	        self.lastErrorEmailTime = new Date();
+	        self.sendingErrorEmail = false;
+	    }
+      }  
+    });
   }
-
+  this.checkLogSize = function(path,filesizeover){
+  	if(filesizeover && path == 'general_log.txt' && !this.sendingGenEmail ){
+  		this.sendingGenEmail = true;
+  		this.setupEmailNotification(path);
+  	}
+  	if(filesizeover && path == 'error_log.txt' && !this.sendingErrorEmail ){
+  		this.sendingErrorEmail = true;
+  		this.setupEmailNotification(path);	
+  	} 
+  }
   this.fileWatchComponent = function fileWatchComponent(callback){
+  	let self = this;
   //chose fs.watchFile() over fs.watch() incase the system is not windows or MacOS... Maybe its a RasberryPi
     if(!this.logFileWatcher){
       this.logFileWatcher = chokidar.watch(['general_log.txt','error_log.txt']);
       this.logFileWatcher.on('change',(path,stats)=>{
-        return callback(path, nconf.get('maxLogSizeBytes') < stats.size);  
+      	self.checkLogSize(path, nconf.get('maxLogSizeBytes') < stats.size);
       })
-    }else{
-    	return callback(path,nconf.get('maxLogSizeBytes') < stats.size);
-    }
+  	}	
   }
   this.reduceLogSize = function (path,callback){
     const tempwritestream = fs.createWriteStream('temp_'+path); //create a temp file so we don't mess with the one we are replacing. it's currently being used by readstream.
