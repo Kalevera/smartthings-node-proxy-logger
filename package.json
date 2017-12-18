@@ -1,0 +1,31 @@
+{
+  "name": "smartthings-node-proxy-logger",
+  "version": "0.5.0",
+  "description": "'a custom logger for the smartthings-node-proxy servers'",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kalevera/smartthings-node-proxy-logger.git"
+  },
+  "keywords": [
+    "smartthings",
+    "logger"
+  ],
+  "engine": {
+    "node": ">=0.6.0"
+  },
+  "author": "Roberto @kalevera",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Kalevera/smartthings-node-proxy-logger/issues"
+  },
+  "homepage": "https://github.com/Kalevera/smartthings-node-proxy-logger#readme",
+  "dependencies": {
+    "chokidar": "^1.7.0",
+    "mailgun.js": "^2.0.1",
+    "nconf": "^0.9.1"
+  }
+}
