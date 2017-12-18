@@ -21,3 +21,13 @@ logger.log('some error we want to track in our smartthings-node-proxy server')
 logger.log(null,'this is a general message that we want to track and will be notified of the message via email')
 
 ```
+
+### modification to config file
+
+must add the following to the config file to recieve emails and to expect a threshold for log files to be reduced in size
+{
+  "maxLogSizeBytes":"12400",  // 12.4kbs                 
+  "mailkey" :"Insert Mailgun key", //this relies on mailgun and mailgun API, find the key in your www.mailgun.com dashboard
+  "maildomain":"Insert Mailgun domain", //find the sandbox domain or an authroized domain in your www.mailgun.com dashboard
+  "myEmail":"Insert the email that is getting notifications" //if using sandbox you'll need to verify the email on mailgun dashboard
+  }
